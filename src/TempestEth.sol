@@ -32,11 +32,14 @@ contract TempestEth is Tempest {
         // sanity checks
         require(msg.value == 0, "Message value is supposed to be zero for ETH instance");
 
-        (bool success,) = _recipient.call{value: (_amount - _fee)}("");
-        require(success, "payment to _recipient did not go through");
-        if (_fee > 0) {
-            (success,) = _relayer.call{value: _fee}("");
-            require(success, "payment to _relayer did not go through");
+        unchecked {
+            // safe unchecked block since all calls to this function already check that fee <= amount
+            (bool success,) = _recipient.call{value: (_amount - _fee)}("");
+            require(success, "payment to _recipient did not go through");
+            if (_fee > 0) {
+                (success,) = _relayer.call{value: _fee}("");
+                require(success, "payment to _relayer did not go through");
+            }
         }
     }
 }

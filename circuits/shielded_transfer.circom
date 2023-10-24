@@ -3,9 +3,9 @@ pragma circom 2.0.0;
 include "../node_modules/circomlib/circuits/poseidon.circom";
 include "../node_modules/circomlib/circuits/bitify.circom";
 include "../node_modules/circomlib/circuits/comparators.circom";
-include "merkleTreeComponent.circom";
-include "depositComponent.circom";
-
+include "./components/merkleTreeComponent.circom";
+include "./components/depositComponent.circom";
+include "./components/withdrawComponent.circom";
 
 
 // here we assume that oldRoot is the immediate last root and is what the user is inserting the change commitment hash into
@@ -37,38 +37,18 @@ template ShieldedTransfer(levels) {
 
 
 
-    // used to get the leaf index of a leaf based on the pathIndices given
-    component leafIndexNum = Bits2Num(levels);
-    for (var i = 0; i < levels; i++) {
-        leafIndexNum.in[i] <== pathIndices[i];
-    }
-
-
     // prove you know the preimage of the nullifier hash
-    component nullifierHasher = Poseidon(4);
-    nullifierHasher.inputs[0] <== nullifier;
-    nullifierHasher.inputs[1] <== 1;
-    nullifierHasher.inputs[2] <== leafIndexNum.out;
-    nullifierHasher.inputs[3] <== denomination;
-    nullifierHasher.out === nullifierHash;
-
-
     // prove that same nullifier and denomination generate the right commitmenthash
-    component commitmentHasher = Poseidon(3);
-    commitmentHasher.inputs[0] <== nullifier;
-    commitmentHasher.inputs[1] <== 0;
-    commitmentHasher.inputs[2] <== denomination;
-
-
     // prove commitment hash is in the tree and oldRoot is the root of the private path elements
-    component tree = MerkleTreeChecker(levels);
-    tree.leaf <== commitmentHasher.out;
-    tree.root <== oldRoot;
+    component withdraw = ShieldedWithdraw(levels);
+    withdraw.root <== oldRoot;
+    withdraw.nullifierHash <== nullifierHash;
+    withdraw.denomination <== denomination;
+    withdraw.nullifier <== nullifier;
     for (var i = 0; i < levels; i++) {
-        tree.pathElements[i] <== pathElements[i];
-        tree.pathIndices[i] <== pathIndices[i];
+        withdraw.pathElements[i] <== pathElements[i];
+        withdraw.pathIndices[i] <== pathIndices[i];
     }
-
 
 
     // prove amount <= denomination
@@ -78,23 +58,19 @@ template ShieldedTransfer(levels) {
     lte.out === 1;
 
 
-
     // prove addition of new note commitment hash to the immediate past note
     component deposit = Deposit(20);
     deposit.oldRoot <== oldRoot;
     deposit.commitmentHash <== changeCommitmentHash;
     deposit.denomination <== denomination - amount;
     deposit.root <== rootAfterChangeWasAdded;
-    
     deposit.nullifier <== changeNullifier;
     deposit.topNodes[0] <== topNodes[0];
     deposit.topNodes[1] <== topNodes[1];
-    
     for (var i = 0; i < levels; i++) {
         deposit.pathElements[i] <== afterPathElements[i];
         deposit.pathIndices[i] <== afterPathIndices[i];
     }
-
 
 
     // prove addition of recipient note commitment hash to the root output after adding sender's change to tree
@@ -103,11 +79,9 @@ template ShieldedTransfer(levels) {
     deposit2.commitmentHash <== destCommitmentHash;
     deposit2.denomination <==  amount;
     deposit2.root <== rootAfterDestWasAdded;
-    
     deposit2.nullifier <== destNullifier;
     deposit2.topNodes[0] <== topNodes2[0];
     deposit2.topNodes[1] <== topNodes2[1];
-    
     for (var i = 0; i < levels; i++) {
         deposit2.pathElements[i] <== afterPathElements2[i];
         deposit2.pathIndices[i] <== afterPathIndices2[i];

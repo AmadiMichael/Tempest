@@ -18,7 +18,7 @@ import {
 abstract contract Tempest is ReentrancyGuard {
     uint256 constant FIELD_SIZE = 21888242871839275222246405745257275088548364400416034343698204186575808495617;
     uint256 constant ROOT_HISTORY_SIZE = 30;
-    bytes32 constant initialRootZero = 0x2b0f6fc0179fa65b6f73627c0e1e84c7374d2eaec44c9a48f2571393ea77bcbb;
+    bytes32 constant initialRootZero = 0x2b0f6fc0179fa65b6f73627c0e1e84c7374d2eaec44c9a48f2571393ea77bcbb; // Keccak256("Tornado")
 
     uint256 immutable levels;
     IFullWithdrawVerifier immutable fullWithdrawVerifier;
@@ -27,11 +27,19 @@ abstract contract Tempest is ReentrancyGuard {
     IShieldedTransferVerifier immutable shieldedTransferVerifier;
     IShieldedClaimVerifier immutable shieldedClaimVerifier;
 
+    // current index of the latest root in the roots array
     uint128 public currentRootIndex;
+
+    // index which the next deposit commitment hash should go into
     uint128 public nextIndex;
 
+    // fixed size array of past roots to enable withdrawal using any last-ROOT_HISTORY_SIZE root from the past
     bytes32[ROOT_HISTORY_SIZE] public roots;
+
+    // mapping of nullifier hashes to if they have been consumed or not
     mapping(bytes32 => bool) public nullifierHashes;
+
+    // mapping of an address and it's pending commitment hash info (i.e commitment hash and amount deposited)
     mapping(address => DepositInfo) pendingCommit;
 
     event Deposit(bytes32 indexed commitment, uint256 leafIndex, uint256 timestamp);
@@ -73,7 +81,7 @@ abstract contract Tempest is ReentrancyGuard {
     }
 
     /**
-     * @dev Let users delete a previously committed commitment hash and withdraw the denomination they deposited alongside it
+     * @notice Let users delete a previously committed commitment hash and withdraw the denomination they deposited alongside it
      */
     function clear() external nonReentrant {
         require(pendingCommit[msg.sender].commitment != bytes32(0), "not committed");
@@ -83,7 +91,7 @@ abstract contract Tempest is ReentrancyGuard {
     }
 
     /**
-     * @dev lets users commit with any amount and a commitment hash which they can add into the tree whenever they want
+     * @notice lets users commit with any amount and a commitment hash which they can add into the tree whenever they want
      * @param _commitment commitment hash of user's deposit
      */
     function commit(bytes32 _commitment) external payable nonReentrant {
@@ -94,6 +102,7 @@ abstract contract Tempest is ReentrancyGuard {
     }
 
     /**
+     * @notice deposit with commitment hash stored onchain when `commit` function was called
      * @dev lets users update the current merkle root by providing a snark proof that proves they added `pendingCommit[msg.sender]` to the current merkle tree root `roots[currentRootIndex]` and verifying it onchain
      * @param _proof snark proof of correct addition of `pendingCommit[msg.sender]` to the current merkle tree root `roots[currentRootIndex]`
      * @param newRoot new root computed by the user after adding `pendingCommit[msg.sender]` to the current merkle tree root `roots[currentRootIndex]`
@@ -142,7 +151,8 @@ abstract contract Tempest is ReentrancyGuard {
     function _processDeposit() internal virtual;
 
     /**
-     * @dev Withdraw all deposit associated with a commitment hash from the contract. Mostly used to remove deposit in the case that the merkle tree is filled
+     * @notice Withdraw all deposit associated with a commitment hash from the contract.
+     * @dev Mostly used to remove deposit in the case that the merkle tree is filled
      * @param _proof is a zkSNARK proof data
      * @param _root is the root the user wants to proof that their commitment hash is part of
      * @param _nullifierHash nullifier hash associated with the commitment hash the user proves they have
@@ -187,7 +197,7 @@ abstract contract Tempest is ReentrancyGuard {
     }
 
     /**
-     * @dev Partially withdraw from a commitmentHash from the contract. Can withdraw all but nobody would know you withdrew all
+     * @notice Partially withdraw from a commitmentHash from the contract. Can withdraw all but nobody would know you withdrew all
      * @param _proof is a zkSNARK proof data
      * @param _root is the root the user wants to proof that their commitment hash is part of
      * @param _nullifierHash nullifier hash associated with the commitment hash the user proves they have
@@ -251,9 +261,12 @@ abstract contract Tempest is ReentrancyGuard {
     }
 
     /**
+     * @notice Allows two parties to confidentially exchange monetary value without any body knowing the `from`, `to`, or `amount` sent.
      * @dev Shielded transfer lets users partially withdraw from a commitmenthash they have the nullifier to, send the change to the next available leaf index and create another leaf index for the amount `sent`
-     *      then they can share the nullifier of this amount leaf index to the recipient,
-     *      The recipient in turn creates a partial withdraw proof from this amount sent's leaf index to a new leaf index that only they know the nullifier to.
+     *      then they can share the nullifier of this amount-sent leaf index to the recipient,
+     *      The recipient in turn creates a partial withdraw proof from this amount sent's leaf index to a new leaf index that only they know the nullifier to. This way the receiver is sure that the sender cannot
+     *      spend sent funds.
+     *      This is basically two partial withdraw operations but with extra constriants since both happen offchain first before onchain, we have to ensure that the state transition is correct between both root changes too.
      */
     function shieldedTransfer(ShieldedTransferStruct calldata sendProof, ShieldedClaimStruct calldata redepositProof)
         external
@@ -321,6 +334,9 @@ abstract contract Tempest is ReentrancyGuard {
 
         // update next index
         uint256 _nextIndex = nextIndex;
+        // add by 3 since 3 roots are created i.e sender's change root, destination's public root and destination's private root
+        // destination's public root is the root given to them by the sender (hence public)
+        // destination's private root is the root they created after withdrawing from the public commitment hash
         nextIndex += 3;
 
         emit ShieldedTransfer(
@@ -350,15 +366,17 @@ abstract contract Tempest is ReentrancyGuard {
         do {
             if (_root == roots[i]) return true;
             if (i == 0) i = ROOT_HISTORY_SIZE;
-            i--;
+            --i;
         } while (i != currentRootIndex);
         return false;
     }
 
+    ///@notice offchain utility that checks if a nullifier hashes has been consumed or not, returns a boolean
     function isSpent(bytes32 _nullifierHash) public view returns (bool) {
         return nullifierHashes[_nullifierHash];
     }
 
+    ///@notice batch version of isSpent(bytes32), returns an array of booleans
     function isSpentArray(bytes32[] calldata _nullifierHashes) external view returns (bool[] memory spent) {
         spent = new bool[](_nullifierHashes.length);
         for (uint256 i = 0; i < _nullifierHashes.length; i++) {
