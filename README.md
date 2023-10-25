@@ -81,3 +81,7 @@ Tempest is a privacy solution, enables users to deposit tokens into a smart cont
     - Circuit:
       - Prove everything in the withdrawal circuit above to withdraw everything from shared recipient leaf
       - prove everything in the deposit circuit above to deposit everything into next leaf index
+
+## Why no relayer used for shielded (confidential) transfer?
+
+`Relayer` and `fee` are not included for shielded transfers. This was intentional and was done to avoid giving out info on the amount being sent. But then this might mean (to outside observers) that someone aware of the transaction (one of the parties) will be the one to broadcast the transaction and this might give a hint as to who the sender/recipient is. A solution to this is for the recipient to create another shielded transfer proof and send this to the relayer who creates a shielded claim proof for that and then sends both (`sender <-> recipient` & `recipient <-> relayer`) confidential transfers onchain via a multicall contract. This way, only the sender and recipient know the exact amount and parties involved and all the relayer knows is the logical lower bound the amount might be (if they assume that the recipient won't pay a fee higher than or even close to the actual amount sent). There is a test showcasing this in `test/ShieldedTransfer.t.sol:ShieldedTransferTest::test_shielded_transfer_via_relayer()`

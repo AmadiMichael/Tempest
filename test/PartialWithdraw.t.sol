@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity 0.8.21;
 
-import {Shared, Proof} from "./Shared.sol";
+import {Shared, Proof} from "./Shared.t.sol";
 
 contract PartialWithdrawTest is Shared {
     function test_deposit_and_withdraw_twice_using_partial_withdraw() external {

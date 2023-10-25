@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity 0.8.21;
 
-import {Shared, Proof, ShieldedTransferStruct, ShieldedClaimStruct} from "./Shared.sol";
+import {Shared, Proof, ShieldedTransferStruct, ShieldedClaimStruct} from "./Shared.t.sol";
+import {Multicall} from "./utils/Multicall.sol";
 
 contract ShieldedTransferTest is Shared {
     function start()
@@ -114,6 +115,140 @@ contract ShieldedTransferTest is Shared {
                 pushedCommitments4,
                 bytes("")
             )
+        );
+    }
+
+    function test_shielded_transfer_via_relayer() external {
+        Multicall multicaller = new Multicall();
+
+        (
+            ,
+            address receiver,
+            bytes32 commitment,
+            bytes32 nullifierHash,
+            ,
+            GetShieldedTransferProofReturnStruct memory senderShieldedTransferProofReturnStruct,
+            GetShieldedClaimProofReturnStruct memory getShieldedClaimProofReturnStruct
+        ) = start();
+
+        address relayer = address(bytes20(keccak256("relayer")));
+
+        // shielded transfer
+        // receiver creates proof
+        bytes32[] memory pushedCommitments = new bytes32[](4);
+        pushedCommitments[0] = commitment;
+        pushedCommitments[1] = senderShieldedTransferProofReturnStruct.changeCommitmentHash;
+        pushedCommitments[2] = senderShieldedTransferProofReturnStruct.destCommitmentHash;
+        pushedCommitments[3] = getShieldedClaimProofReturnStruct.changeCommitmentHash;
+        GetShieldedTransferProofReturnStruct memory recipientShieldedTransferProofReturnStruct =
+        getShieldedTransferProof(
+            3,
+            4,
+            getShieldedClaimProofReturnStruct.changeNullifier,
+            getShieldedClaimProofReturnStruct.changeNullifierHash,
+            1.5 ether,
+            0.1 ether,
+            pushedCommitments
+        );
+
+        // relayer creates proof too
+        bytes32[] memory pushedCommitments2 = new bytes32[](6);
+        pushedCommitments2[0] = commitment;
+        pushedCommitments2[1] = senderShieldedTransferProofReturnStruct.changeCommitmentHash;
+        pushedCommitments2[2] = senderShieldedTransferProofReturnStruct.destCommitmentHash;
+        pushedCommitments2[3] = getShieldedClaimProofReturnStruct.changeCommitmentHash;
+        pushedCommitments2[4] = recipientShieldedTransferProofReturnStruct.changeCommitmentHash;
+        pushedCommitments2[5] = recipientShieldedTransferProofReturnStruct.destCommitmentHash;
+        GetShieldedClaimProofReturnStruct memory relayerShieldedClaimProofReturnStruct = getShieldedClaimProve(
+            5,
+            6,
+            recipientShieldedTransferProofReturnStruct.destNullifier,
+            recipientShieldedTransferProofReturnStruct.destNullifierHash,
+            0.1 ether,
+            pushedCommitments2
+        );
+
+        bytes[] memory data = new bytes[](2);
+        data[0] = abi.encodeCall(
+            tempestEth.shieldedTransfer,
+            (
+                ShieldedTransferStruct(
+                    senderShieldedTransferProofReturnStruct.proof,
+                    senderShieldedTransferProofReturnStruct.rootBefore,
+                    nullifierHash,
+                    senderShieldedTransferProofReturnStruct.changeCommitmentHash,
+                    senderShieldedTransferProofReturnStruct.destCommitmentHash,
+                    senderShieldedTransferProofReturnStruct.rootAfterAddingChangeToTree,
+                    senderShieldedTransferProofReturnStruct.rootAfterAddingDestToTree
+                    ),
+                ShieldedClaimStruct(
+                    getShieldedClaimProofReturnStruct.proof,
+                    senderShieldedTransferProofReturnStruct.destNullifierHash,
+                    getShieldedClaimProofReturnStruct.changeCommitmentHash,
+                    getShieldedClaimProofReturnStruct.rootAfter
+                    )
+            )
+        );
+        data[1] = abi.encodeCall(
+            tempestEth.shieldedTransfer,
+            (
+                ShieldedTransferStruct(
+                    recipientShieldedTransferProofReturnStruct.proof,
+                    recipientShieldedTransferProofReturnStruct.rootBefore,
+                    getShieldedClaimProofReturnStruct.changeNullifierHash,
+                    recipientShieldedTransferProofReturnStruct.changeCommitmentHash,
+                    recipientShieldedTransferProofReturnStruct.destCommitmentHash,
+                    recipientShieldedTransferProofReturnStruct.rootAfterAddingChangeToTree,
+                    recipientShieldedTransferProofReturnStruct.rootAfterAddingDestToTree
+                    ),
+                ShieldedClaimStruct(
+                    relayerShieldedClaimProofReturnStruct.proof,
+                    recipientShieldedTransferProofReturnStruct.destNullifierHash,
+                    relayerShieldedClaimProofReturnStruct.changeCommitmentHash,
+                    relayerShieldedClaimProofReturnStruct.rootAfter
+                    )
+            )
+        );
+
+        address[] memory addresses = new address[](2);
+        addresses[0] = address(tempestEth);
+        addresses[1] = address(tempestEth);
+
+        multicaller.multicall(addresses, data);
+
+        bytes32[] memory pushedCommitments3 = new bytes32[](7);
+        pushedCommitments3[0] = commitment;
+        pushedCommitments3[1] = senderShieldedTransferProofReturnStruct.changeCommitmentHash;
+        pushedCommitments3[2] = senderShieldedTransferProofReturnStruct.destCommitmentHash;
+        pushedCommitments3[3] = getShieldedClaimProofReturnStruct.changeCommitmentHash;
+        pushedCommitments3[4] = recipientShieldedTransferProofReturnStruct.changeCommitmentHash;
+        pushedCommitments3[5] = recipientShieldedTransferProofReturnStruct.destCommitmentHash;
+        pushedCommitments3[6] = relayerShieldedClaimProofReturnStruct.changeCommitmentHash;
+
+        // relayer can withdraw 0.1 eth
+        withdrawAndAssert(
+            relayer,
+            0.1 ether,
+            address(0),
+            0,
+            6,
+            relayerShieldedClaimProofReturnStruct.changeNullifier,
+            relayerShieldedClaimProofReturnStruct.changeNullifierHash,
+            pushedCommitments3,
+            bytes("")
+        );
+
+        // recipient can withdraw 1.4 eth
+        withdrawAndAssert(
+            receiver,
+            1.4 ether,
+            address(0),
+            0,
+            4,
+            recipientShieldedTransferProofReturnStruct.changeNullifier,
+            recipientShieldedTransferProofReturnStruct.changeNullifierHash,
+            pushedCommitments3,
+            bytes("")
         );
     }
 

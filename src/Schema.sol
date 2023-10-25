@@ -16,7 +16,7 @@ struct DepositInfo {
 struct ShieldedTransferStruct {
     Proof _proof;
     bytes32 _root;
-    bytes32 _nullifierHash;
+    bytes32 _nullifierHash; // `from` nullifier hash
     bytes32 _changeCommitmentHash;
     bytes32 _destCommitmentHash;
     bytes32 _rootAfterChangeWasAdded;
@@ -25,7 +25,7 @@ struct ShieldedTransferStruct {
 
 struct ShieldedClaimStruct {
     Proof _proof;
-    bytes32 _nullifierHash;
+    bytes32 _nullifierHash; // `shared dest` nullifier hash
     bytes32 _newCommitmentHash;
     bytes32 _newRoot;
 }

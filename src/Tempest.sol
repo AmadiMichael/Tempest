@@ -48,9 +48,9 @@ abstract contract Tempest is ReentrancyGuard {
         bytes32 indexed changeCommitmentHash,
         bytes32 indexed sharedCommitmentHash,
         bytes32 indexed redepositCommitmentHash,
-        uint256 lastIndexBeforeShieldedTransfer,
+        uint256 nextIndexBeforeShieldedTransfer,
         bytes32 sendNullifierHash,
-        bytes32 redpositNullifierHash
+        bytes32 sharedDepositNullifierHash
     );
 
     /**
@@ -83,7 +83,7 @@ abstract contract Tempest is ReentrancyGuard {
     /**
      * @notice Let users delete a previously committed commitment hash and withdraw the denomination they deposited alongside it
      */
-    function clear() external nonReentrant {
+    function clear() external {
         require(pendingCommit[msg.sender].commitment != bytes32(0), "not committed");
         uint256 denomination = pendingCommit[msg.sender].denomination;
         delete pendingCommit[msg.sender];
@@ -94,7 +94,7 @@ abstract contract Tempest is ReentrancyGuard {
      * @notice lets users commit with any amount and a commitment hash which they can add into the tree whenever they want
      * @param _commitment commitment hash of user's deposit
      */
-    function commit(bytes32 _commitment) external payable nonReentrant {
+    function commit(bytes32 _commitment) external payable {
         require(pendingCommit[msg.sender].commitment == bytes32(0), "Pending commitment hash");
         require(uint256(_commitment) < FIELD_SIZE, "_commitment not in field");
         pendingCommit[msg.sender] = DepositInfo({commitment: _commitment, denomination: msg.value});
@@ -107,7 +107,7 @@ abstract contract Tempest is ReentrancyGuard {
      * @param _proof snark proof of correct addition of `pendingCommit[msg.sender]` to the current merkle tree root `roots[currentRootIndex]`
      * @param newRoot new root computed by the user after adding `pendingCommit[msg.sender]` to the current merkle tree root `roots[currentRootIndex]`
      */
-    function deposit(Proof calldata _proof, bytes32 newRoot) external payable nonReentrant {
+    function deposit(Proof calldata _proof, bytes32 newRoot) external {
         DepositInfo memory depositInfo = pendingCommit[msg.sender];
         require(depositInfo.commitment != bytes32(0), "not commited");
 
@@ -169,7 +169,7 @@ abstract contract Tempest is ReentrancyGuard {
         uint256 _amount,
         address payable _relayer,
         uint256 _fee
-    ) external payable nonReentrant {
+    ) external {
         require(_fee <= _amount, "Fee exceeds transfer value");
         require(!nullifierHashes[_nullifierHash], "The note has been already spent");
         require(isKnownRoot(_root), "Cannot find your merkle root"); // Make sure to use a recent one
@@ -192,8 +192,10 @@ abstract contract Tempest is ReentrancyGuard {
         );
 
         nullifierHashes[_nullifierHash] = true;
-        _processWithdraw(_recipient, _amount, _relayer, _fee);
+
         emit Withdrawal(_recipient, _nullifierHash, _relayer, _fee);
+
+        _processWithdraw(_recipient, _amount, _relayer, _fee);
     }
 
     /**
@@ -218,7 +220,7 @@ abstract contract Tempest is ReentrancyGuard {
         uint256 _amount,
         address payable _relayer,
         uint256 _fee
-    ) external payable nonReentrant {
+    ) external {
         require(_fee <= _amount, "Fee exceeds transfer value");
         require(!nullifierHashes[_nullifierHash], "The note has been already spent");
         require(isKnownRoot(_root), "Cannot find your merkle root"); // Make sure to use a recent one
@@ -243,8 +245,6 @@ abstract contract Tempest is ReentrancyGuard {
         );
 
         nullifierHashes[_nullifierHash] = true;
-        _processWithdraw(_recipient, _amount, _relayer, _fee);
-        emit Withdrawal(_recipient, _nullifierHash, _relayer, _fee);
 
         uint128 newCurrentRootIndex = uint128((currentRootIndex + 1) % ROOT_HISTORY_SIZE);
 
@@ -257,7 +257,15 @@ abstract contract Tempest is ReentrancyGuard {
 
         // update next index
         nextIndex += 1;
+
+        // emit withdraw event
+        emit Withdrawal(_recipient, _nullifierHash, _relayer, _fee);
+
+        // emit deposit event
         emit Deposit(_newCommitmentHash, _nextIndex, block.timestamp);
+
+        // do last to avoid reentrancy affecting logs
+        _processWithdraw(_recipient, _amount, _relayer, _fee);
     }
 
     /**
@@ -270,8 +278,6 @@ abstract contract Tempest is ReentrancyGuard {
      */
     function shieldedTransfer(ShieldedTransferStruct calldata sendProof, ShieldedClaimStruct calldata redepositProof)
         external
-        payable
-        nonReentrant
     {
         // send proof
         require(!nullifierHashes[sendProof._nullifierHash], "The note has been already spent");
