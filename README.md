@@ -4,7 +4,8 @@ Tempest is a privacy solution, enables users to deposit tokens into a smart cont
 
 ## Features
 
-- Deposit: Depositing a note (any amount of a token) into the smart contract. Not a confidential operation
+- Deposit: Depositing a note (any amount of a token) into the smart contract. Not a confidential operation.
+  - Depositing of any amount at withdrawal time does not have an effect on the anonymity set (as long as the partial withdrawal is not too big relative to other deposits, the anonymity set is basically as big as deposits with amounts higher than your partial withdrawal amount).
 - Withdraw: Withdrawing all of the note anonymously via incentivized relayers (No link between your withdrawal and your deposit)
 - Partial Withdraw: Withdrawing part of a notes total value anonymously via incentivized relayers. This results in a new note (change) similar to how you get a #50 change if you give a shop a #100 note for a #50 product
 - Shielded (Confidential) transfer: Send part of all of the value of a note to a new note where only the recipient has the info to generate a proof to use that new note. This works in 2 steps with the sender generating a `send proof` and sends this alongside some info to the receiver who uses this info to generate a `claim proof` and submits both proofs onchain. `This process, when used with a relayer leaks no info about what the sender, receiver or amount is`.

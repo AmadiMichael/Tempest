@@ -129,7 +129,7 @@ abstract contract Tempest is ReentrancyGuard {
         );
 
         // set pending commit to 0 bytes
-        pendingCommit[msg.sender] = DepositInfo(bytes32(0), 0);
+        delete pendingCommit[msg.sender];
         uint128 newCurrentRootIndex = uint128((_currentRootIndex + 1) % ROOT_HISTORY_SIZE);
 
         // update currentRootIndex
