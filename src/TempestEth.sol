@@ -23,7 +23,11 @@ contract TempestEth is Tempest {
         )
     {}
 
-    function _processDeposit() internal override {}
+    function commit(bytes32 _commitment) external payable {
+        _commit(_commitment, msg.value);
+    }
+
+    function _processDeposit(uint256 value) internal override {}
 
     function _processWithdraw(address payable _recipient, uint256 _amount, address payable _relayer, uint256 _fee)
         internal
