@@ -11,7 +11,7 @@ template FullWithdraw(levels) {
     signal input root;
     signal input nullifierHash;
     signal input denomination;
-    signal input recipient; // not taking part in any computations
+    signal input recipient; // not taking part in any computations (would just be use to add a constraint to the circuit) (this is to prevent MEV)
     signal input relayer;  // not taking part in any computations
     signal input fee;      // not taking part in any computations
 
