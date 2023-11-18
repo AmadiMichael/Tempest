@@ -93,13 +93,16 @@ abstract contract Tempest is ReentrancyGuard {
     /**
      * @notice lets users commit with any amount and a commitment hash which they can add into the tree whenever they want
      * @param _commitment commitment hash of user's deposit
+     * @param _value amount to deposit
      */
-    function commit(bytes32 _commitment) external payable {
+    function _commit(bytes32 _commitment, uint256 _value) internal virtual {
         require(pendingCommit[msg.sender].commitment == bytes32(0), "Pending commitment hash");
         require(uint256(_commitment) < FIELD_SIZE, "_commitment not in field");
-        pendingCommit[msg.sender] = DepositInfo({commitment: _commitment, denomination: msg.value});
-        _processDeposit();
+        pendingCommit[msg.sender] = DepositInfo({commitment: _commitment, denomination: _value});
+        _processDeposit(_value);
     }
+
+    
 
     /**
      * @notice deposit with commitment hash stored onchain when `commit` function was called
@@ -147,8 +150,9 @@ abstract contract Tempest is ReentrancyGuard {
 
     /**
      * @dev this function is defined in a child contract
+     * @param value amount to deposit
      */
-    function _processDeposit() internal virtual;
+    function _processDeposit(uint256 value) internal virtual;
 
     /**
      * @notice Withdraw all deposit associated with a commitment hash from the contract.
