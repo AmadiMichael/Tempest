@@ -33,10 +33,14 @@ contract TempestERC20 is Tempest {
     }
 
 
+    function commit(bytes32 _commitment, uint256 _value) external payable {
+        _commit(_commitment, _value);
+    }
+
     //@dev this function would be performing a transfer from the current caller (msg.sender)
-    function _processDeposit() internal override {
+    function _processDeposit(uint256 _value) internal override {
         (bool success, bytes memory data) = token.call(
-            abi.encodeWithSelector(bytes4(keccak256("transferFrom(address,address,uint256)")), msg.sender, address(this), _amount)
+            abi.encodeWithSelector(bytes4(keccak256("transferFrom(address,address,uint256)")), msg.sender, address(this), _value)
         );
 
         if (!(success && (data.length == 0 || abi.decode(data, (bool))))) {
@@ -48,15 +52,14 @@ contract TempestERC20 is Tempest {
         internal
         override
     {
-        // sanity checks
-        require(msg.value == 0, "Message value is supposed to be zero for ETH instance");
 
         unchecked {
             // safe unchecked block since all calls to this function already check that fee <= amount
-            (bool success,) = _recipient.call{value: (_amount - _fee)}("");
+            (bool success, ) = token.call(abi.encodeWithSelector(bytes4(keccak256("transfer(address,uint256)")), _recipient, _amount - _fee));
             require(success, "payment to _recipient did not go through");
+            
             if (_fee > 0) {
-                (success,) = _relayer.call{value: _fee}("");
+                (success, ) = token.call(abi.encodeWithSelector(bytes4(keccak256("transfer(address,uint256)")), _relayer, _fee));
                 require(success, "payment to _relayer did not go through");
             }
         }
