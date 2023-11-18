@@ -9,6 +9,7 @@ include "./components/withdrawComponent.circom";
 
 
 // here we assume that oldRoot is the immediate last root and is what the user is inserting the change commitment hash into
+// partial withdrawal works by making a full withdrawal and redepositing the balances
 template PartialWithdraw(levels) {
     // public inputs
     signal input oldRoot;
